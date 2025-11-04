@@ -1,0 +1,84 @@
+import json
+from mcp.server.fastmcp import FastMCP
+
+from router.engine import RouterEngine
+from router.models import MODELS
+
+mcp = FastMCP("RouteMCP")
+engine = RouterEngine()
+
+
+@mcp.tool()
+def route(prompt: str, task_type: str = "") -> str:
+    tt = task_type if task_type else None
+    try:
+        return engine.route(prompt, tt)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@mcp.tool()
+def ask(model: str, prompt: str) -> str:
+    valid_ids = [m.id for m in MODELS if engine.providers.get(m.provider, None) and engine.providers[m.provider].is_available()]
+    if model not in valid_ids:
+        available = ", ".join(valid_ids) if valid_ids else "none (no API keys configured)"
+        if not valid_ids:
+            return (f"Model '{model}' not available. Configure API keys via:\n"
+                    f"  GEMINI_API_KEY, GROQ_API_KEY, CEREBRAS_API_KEY\n"
+                    f"Available models: none")
+        return f"Model '{model}' not found. Available: {available}"
+    try:
+        return engine.ask(model, prompt)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@mcp.tool()
+def compare(prompt: str, models: str) -> str:
+    model_list = [m.strip() for m in models.split(",")]
+    try:
+        results = engine.compare(prompt, model_list)
+        return "\n\n".join(
+            f"=== {mid} ===\n{res}"
+            for mid, res in results.items()
+        )
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@mcp.tool()
+def models() -> str:
+    available = engine.get_available_models()
+    if not available:
+        return ("No models available. Configure API keys as environment variables:\n"
+                "  GEMINI_API_KEY=<key>\n"
+                "  GROQ_API_KEY=<key>\n"
+                "  CEREBRAS_API_KEY=<key>")
+    lines = ["# Available Models", ""]
+    for m in available:
+        strengths = ", ".join(m.strengths)
+        lines.append(f"## {m.id}")
+        lines.append(f"  Provider: {m.provider}")
+        lines.append(f"  Name: {m.name}")
+        lines.append(f"  Strengths: {strengths}")
+        lines.append(f"  Context: {m.context_window:,} tokens")
+        lines.append(f"  Speed: {m.speed}")
+        lines.append(f"  Cost: {m.cost}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def classify_task(prompt: str) -> str:
+    from router.classifier import classify as clf
+    task = clf(prompt)
+    from router.models import TASK_ROUTING
+    recommended = TASK_ROUTING.get(task, TASK_ROUTING["general"])
+    return (
+        f"Detected task type: {task}\n"
+        f"Recommended models: {', '.join(recommended)}"
+    )
+
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
