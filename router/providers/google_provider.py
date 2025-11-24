@@ -24,8 +24,8 @@ class GoogleProvider(AIProvider):
         if not self.api_key:
             return False
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={self.api_key}"
-            resp = await self._client.get(url)
+            url = "https://generativelanguage.googleapis.com/v1beta/models"
+            resp = await self._client.get(url, headers={"X-Goog-Api-Key": self.api_key})
             return resp.status_code == 200
         except Exception:
             logger.exception("%s availability check failed", self.name)
@@ -34,7 +34,7 @@ class GoogleProvider(AIProvider):
     async def ask(self, model: str, prompt: str) -> str:
         if not self.api_key:
             raise ProviderError(self.name, "API key not configured")
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
@@ -45,7 +45,7 @@ class GoogleProvider(AIProvider):
         last_error = None
         for attempt in range(_MAX_RETRIES):
             try:
-                resp = await self._client.post(url, json=payload)
+                resp = await self._client.post(url, json=payload, headers={"X-Goog-Api-Key": self.api_key})
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 logger.warning("%s | attempt %d/%d network error: %s", self.name, attempt + 1, _MAX_RETRIES, e)
                 last_error = ProviderError(self.name, f"Network error: {e}")
