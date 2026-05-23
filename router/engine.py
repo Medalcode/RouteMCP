@@ -16,15 +16,15 @@ class RouterEngine:
             "cerebras": CerebrasProvider(),
         }
 
-    def get_available_models(self) -> list[ModelInfo]:
+    async def get_available_models(self) -> list[ModelInfo]:
         available = []
         for m in MODELS:
             prov = self.providers.get(m.provider)
-            if prov and prov.is_available():
+            if prov and await prov.is_available():
                 available.append(m)
         return available
 
-    def route(self, prompt: str, task_type: Optional[str] = None) -> str:
+    async def route(self, prompt: str, task_type: Optional[str] = None) -> str:
         task = classify(prompt, task_type)
         preferences = TASK_ROUTING.get(task, TASK_ROUTING["general"])
         errors = []
@@ -33,32 +33,32 @@ class RouterEngine:
             if not model:
                 continue
             prov = self.providers.get(model.provider)
-            if not prov or not prov.is_available():
+            if not prov or not await prov.is_available():
                 continue
             try:
-                result = prov.ask(model_id, prompt)
+                result = await prov.ask(model_id, prompt)
                 return result
             except ProviderError as e:
                 errors.append(str(e))
                 continue
         raise ProviderError("router", f"No models available. Errors: {'; '.join(errors) if errors else 'all providers unavailable'}")
 
-    def ask(self, model_id: str, prompt: str) -> str:
+    async def ask(self, model_id: str, prompt: str) -> str:
         model = next((m for m in MODELS if m.id == model_id), None)
         if not model:
             raise ProviderError("router", f"Unknown model: {model_id}")
         prov = self.providers.get(model.provider)
         if not prov:
             raise ProviderError("router", f"Unknown provider: {model.provider}")
-        if not prov.is_available():
+        if not await prov.is_available():
             raise ProviderError(model.provider, "Provider not available (API key missing)")
-        return prov.ask(model_id, prompt)
+        return await prov.ask(model_id, prompt)
 
-    def compare(self, prompt: str, model_ids: list[str]) -> dict[str, str]:
+    async def compare(self, prompt: str, model_ids: list[str]) -> dict[str, str]:
         results = {}
         for model_id in model_ids:
             try:
-                results[model_id] = self.ask(model_id, prompt)
+                results[model_id] = await self.ask(model_id, prompt)
             except ProviderError as e:
                 results[model_id] = f"ERROR: {e}"
         return results

@@ -1,9 +1,16 @@
-import os
-from typing import Optional
-import requests
+import asyncio
 import json
+import logging
+import os
+
+import httpx
 
 from .base import AIProvider, ProviderError
+
+logger = logging.getLogger(__name__)
+
+_RETRY_DELAYS = [1, 2, 4]
+_MAX_RETRIES = 3
 
 
 class GoogleProvider(AIProvider):
@@ -11,13 +18,21 @@ class GoogleProvider(AIProvider):
 
     def __init__(self):
         self.api_key = os.environ.get("GEMINI_API_KEY", "")
-        self._available = bool(self.api_key)
+        self._client = httpx.AsyncClient(timeout=httpx.Timeout(60.0))
 
-    def is_available(self) -> bool:
-        return self._available
+    async def is_available(self) -> bool:
+        if not self.api_key:
+            return False
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={self.api_key}"
+            resp = await self._client.get(url)
+            return resp.status_code == 200
+        except Exception:
+            logger.exception("%s availability check failed", self.name)
+            return False
 
-    def ask(self, model: str, prompt: str) -> str:
-        if not self._available:
+    async def ask(self, model: str, prompt: str) -> str:
+        if not self.api_key:
             raise ProviderError(self.name, "API key not configured")
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
         payload = {
@@ -27,11 +42,27 @@ class GoogleProvider(AIProvider):
                 "maxOutputTokens": 8192,
             },
         }
-        resp = requests.post(url, json=payload, timeout=60)
-        if resp.status_code != 200:
-            raise ProviderError(self.name, f"HTTP {resp.status_code}: {resp.text[:200]}")
-        data = resp.json()
-        try:
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-        except (KeyError, IndexError) as e:
-            raise ProviderError(self.name, f"Unexpected response: {json.dumps(data, indent=2)[:300]}")
+        last_error = None
+        for attempt in range(_MAX_RETRIES):
+            try:
+                resp = await self._client.post(url, json=payload)
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                logger.warning("%s | attempt %d/%d network error: %s", self.name, attempt + 1, _MAX_RETRIES, e)
+                last_error = ProviderError(self.name, f"Network error: {e}")
+                if attempt < _MAX_RETRIES - 1:
+                    await asyncio.sleep(_RETRY_DELAYS[attempt])
+                continue
+            if resp.status_code in (429,) or resp.status_code >= 500:
+                logger.warning("%s | attempt %d/%d HTTP %d", self.name, attempt + 1, _MAX_RETRIES, resp.status_code)
+                last_error = ProviderError(self.name, f"HTTP {resp.status_code}: {resp.text[:200]}")
+                if attempt < _MAX_RETRIES - 1:
+                    await asyncio.sleep(_RETRY_DELAYS[attempt])
+                continue
+            if resp.status_code != 200:
+                raise ProviderError(self.name, f"HTTP {resp.status_code}: {resp.text[:200]}")
+            data = resp.json()
+            try:
+                return data["candidates"][0]["content"]["parts"][0]["text"]
+            except (KeyError, IndexError) as e:
+                raise ProviderError(self.name, f"Unexpected response: {json.dumps(data, indent=2)[:300]}")
+        raise last_error

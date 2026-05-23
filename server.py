@@ -9,35 +9,40 @@ engine = RouterEngine()
 
 
 @mcp.tool()
-def route(prompt: str, task_type: str = "") -> str:
+async def route(prompt: str, task_type: str = "") -> str:
     tt = task_type if task_type else None
     try:
-        return engine.route(prompt, tt)
+        return await engine.route(prompt, tt)
     except Exception as e:
         return f"Error: {e}"
 
 
 @mcp.tool()
-def ask(model: str, prompt: str) -> str:
-    valid_ids = [m.id for m in MODELS if engine.providers.get(m.provider, None) and engine.providers[m.provider].is_available()]
+async def ask(model: str, prompt: str) -> str:
+    available = []
+    for m in MODELS:
+        prov = engine.providers.get(m.provider)
+        if prov and await prov.is_available():
+            available.append(m)
+    valid_ids = [m.id for m in available]
     if model not in valid_ids:
-        available = ", ".join(valid_ids) if valid_ids else "none (no API keys configured)"
+        available_str = ", ".join(valid_ids) if valid_ids else "none (no API keys configured)"
         if not valid_ids:
             return (f"Model '{model}' not available. Configure API keys via:\n"
                     f"  GEMINI_API_KEY, GROQ_API_KEY, CEREBRAS_API_KEY\n"
                     f"Available models: none")
-        return f"Model '{model}' not found. Available: {available}"
+        return f"Model '{model}' not found. Available: {available_str}"
     try:
-        return engine.ask(model, prompt)
+        return await engine.ask(model, prompt)
     except Exception as e:
         return f"Error: {e}"
 
 
 @mcp.tool()
-def compare(prompt: str, models: str) -> str:
+async def compare(prompt: str, models: str) -> str:
     model_list = [m.strip() for m in models.split(",")]
     try:
-        results = engine.compare(prompt, model_list)
+        results = await engine.compare(prompt, model_list)
         return "\n\n".join(
             f"=== {mid} ===\n{res}"
             for mid, res in results.items()
@@ -47,8 +52,8 @@ def compare(prompt: str, models: str) -> str:
 
 
 @mcp.tool()
-def models() -> str:
-    available = engine.get_available_models()
+async def models() -> str:
+    available = await engine.get_available_models()
     if not available:
         return ("No models available. Configure API keys as environment variables:\n"
                 "  GEMINI_API_KEY=<key>\n"
@@ -69,7 +74,7 @@ def models() -> str:
 
 
 @mcp.tool()
-def classify_task(prompt: str) -> str:
+async def classify_task(prompt: str) -> str:
     from router.classifier import classify as clf
     task = clf(prompt)
     from router.models import TASK_ROUTING

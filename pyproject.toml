@@ -1,0 +1,5 @@
+[project]
+name = "routemcp"
+version = "1.27.1"
+description = "AI model router MCP server with multi-provider support"
+dependencies = ["mcp", "httpx"]
