@@ -76,7 +76,7 @@ async def models() -> str:
 @mcp.tool()
 async def classify_task(prompt: str) -> str:
     from router.classifier import classify as clf
-    task = clf(prompt)
+    task = await clf(prompt)
     from router.models import TASK_ROUTING
     recommended = TASK_ROUTING.get(task, TASK_ROUTING["general"])
     return (

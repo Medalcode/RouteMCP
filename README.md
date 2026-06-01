@@ -4,13 +4,13 @@ Servidor MCP que clasifica tareas y enruta prompts al mejor modelo de IA disponi
 
 ## How It Works / Cómo Funciona
 
-1. **Classify** — Analiza el prompt y detecta el tipo de tarea (code, math, reasoning, creative, vision, long_context, multilingual, general)
-2. **Route** — Selecciona el mejor modelo según la tarea usando `TASK_ROUTING` priorities
-3. **Fallback** — Si el mejor modelo falla (API error, timeout), prueba el siguiente en la lista
-4. **Ask** — Envía el prompt directamente a un modelo específico
-5. **Compare** — Envía el mismo prompt a múltiples modelos y compara resultados
+1. **Classify** — Analiza el prompt usando IA (Groq `llama-3.1-8b`) con un *fallback* inteligente a palabras clave para detectar el tipo de tarea (code, math, reasoning, creative, vision, long_context, multilingual, general).
+2. **Route** — Selecciona el mejor modelo según la tarea usando las prioridades configuradas en `config.json`.
+3. **Fallback** — Si el mejor modelo falla (API error, timeout, rate limit 429 con Retry-After), prueba el siguiente en la lista.
+4. **Ask** — Envía el prompt directamente a un modelo específico.
+5. **Compare** — Envía el mismo prompt a múltiples modelos en paralelo (concurrencia) y compara resultados rápidamente.
 
-### Routing Logic / Lógica de Enrutamiento
+### Routing Logic / Lógica de Enrutamiento (Vía `config.json`)
 
 | Task Type | Preferred Models |
 |---|---|
@@ -32,7 +32,9 @@ Servidor MCP que clasifica tareas y enruta prompts al mejor modelo de IA disponi
 | `models` | Lista modelos disponibles con capacidades, contexto y costo |
 | `classify_task` | Clasifica un prompt y muestra los modelos recomendados |
 | `route` | Enruta automáticamente al mejor modelo según la tarea |
-| `compare` | Compara respuestas de múltiples modelos para un mismo prompt |
+| `compare` | Compara respuestas de múltiples modelos para un mismo prompt (Ejecución en paralelo) |
+
+> **Nota sobre Configuración:** Toda la lógica de enrutamiento, lista de modelos y palabras clave se genera y lee desde un archivo `config.json` en la raíz del proyecto. ¡Puedes editarlo para personalizar tus modelos sin tocar el código fuente!
 
 ## Providers / Proveedores
 
@@ -46,8 +48,9 @@ Servidor MCP que clasifica tareas y enruta prompts al mejor modelo de IA disponi
 
 - **Python** — `>=3.11`
 - **Framework**: `mcp` (FastMCP) via stdio JSON-RPC
-- **HTTP**: `httpx` (async)
-- **Classifier**: Keyword-based (multilingual EN/ES)
+- **HTTP**: `httpx` (async) con manejo de límites de tasa (`Retry-After`)
+- **Classifier**: Híbrido (LLM basado en Groq `llama-3.1-8b` + Keyword-based fallback)
+- **Configuration**: Externa vía `config.json`
 
 ## Quick Start
 
@@ -93,9 +96,9 @@ routemcp/
 ├── server.py                 # MCP server entry point (tools)
 ├── router/
 │   ├── __init__.py
-│   ├── engine.py             # RouterEngine: routing & fallback logic
-│   ├── classifier.py         # Task classifier (keyword scoring)
-│   ├── models.py             # Model definitions & TASK_ROUTING map
+│   ├── engine.py             # RouterEngine: routing & fallback logic, async compare
+│   ├── classifier.py         # Task classifier (LLM Hybrid + keyword scoring)
+│   ├── models.py             # Model definitions & config.json loader
 │   └── providers/
 │       ├── __init__.py
 │       ├── base.py           # AIProvider base class & ProviderError

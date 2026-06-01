@@ -1,5 +1,6 @@
-from dataclasses import dataclass
-
+import json
+import os
+from dataclasses import dataclass, asdict
 
 @dataclass
 class ModelInfo:
@@ -12,8 +13,7 @@ class ModelInfo:
     cost: str
     is_default: bool = False
 
-
-MODELS = [
+_DEFAULT_MODELS = [
     ModelInfo(
         id="gemini-2.5-pro",
         provider="google",
@@ -89,7 +89,7 @@ MODELS = [
     ),
 ]
 
-TASK_ROUTING = {
+_DEFAULT_TASK_ROUTING = {
     "code": ["gemini-2.5-pro", "llama-3.3-70b", "gemini-2.5-flash", "cerebras-llama-3.3-70b"],
     "reasoning": ["gemini-2.5-pro", "llama-3.3-70b", "gemini-2.5-flash"],
     "math": ["gemini-2.5-pro", "gemini-2.5-flash", "llama-3.3-70b"],
@@ -101,7 +101,7 @@ TASK_ROUTING = {
     "multilingual": ["gemini-2.0-flash", "mixtral-8x7b", "gemini-2.5-flash"],
 }
 
-TASK_KEYWORDS = {
+_DEFAULT_TASK_KEYWORDS = {
     "code": ["code", "código", "programa", "función", "función", "script", "api", "bug", "error",
              "debug", "implement", "refactor", "clase", "método", "function", "class",
              "typescript", "python", "javascript", "rust", "go", "html", "css", "sql",
@@ -126,3 +126,35 @@ TASK_KEYWORDS = {
     "multilingual": ["translate", "traduce", "traducción", "translation", "idioma",
                      "language", "español", "english", "português", "français"],
 }
+
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.json")
+
+def load_config():
+    if not os.path.exists(CONFIG_PATH):
+        default_config = {
+            "models": [asdict(m) for m in _DEFAULT_MODELS],
+            "task_routing": _DEFAULT_TASK_ROUTING,
+            "task_keywords": _DEFAULT_TASK_KEYWORDS,
+        }
+        try:
+            with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+                json.dump(default_config, f, indent=4, ensure_ascii=False)
+        except Exception:
+            pass # fallback to in-memory if directory not writable
+        return _DEFAULT_MODELS, _DEFAULT_TASK_ROUTING, _DEFAULT_TASK_KEYWORDS
+    
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            
+        models = [ModelInfo(**m) for m in data.get("models", [])]
+        if not models:
+            models = _DEFAULT_MODELS
+            
+        task_routing = data.get("task_routing", _DEFAULT_TASK_ROUTING)
+        task_keywords = data.get("task_keywords", _DEFAULT_TASK_KEYWORDS)
+        return models, task_routing, task_keywords
+    except Exception:
+        return _DEFAULT_MODELS, _DEFAULT_TASK_ROUTING, _DEFAULT_TASK_KEYWORDS
+
+MODELS, TASK_ROUTING, TASK_KEYWORDS = load_config()

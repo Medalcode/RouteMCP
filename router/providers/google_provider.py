@@ -56,7 +56,12 @@ class GoogleProvider(AIProvider):
                 logger.warning("%s | attempt %d/%d HTTP %d", self.name, attempt + 1, _MAX_RETRIES, resp.status_code)
                 last_error = ProviderError(self.name, f"HTTP {resp.status_code}: {resp.text[:200]}")
                 if attempt < _MAX_RETRIES - 1:
-                    await asyncio.sleep(_RETRY_DELAYS[attempt])
+                    sleep_time = _RETRY_DELAYS[attempt]
+                    if resp.status_code == 429:
+                        retry_after = resp.headers.get("Retry-After") or resp.headers.get("x-ratelimit-reset")
+                        if retry_after and retry_after.isdigit():
+                            sleep_time = min(int(retry_after), 10)
+                    await asyncio.sleep(sleep_time)
                 continue
             if resp.status_code != 200:
                 raise ProviderError(self.name, f"HTTP {resp.status_code}: {resp.text[:200]}")

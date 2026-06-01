@@ -1,3 +1,4 @@
+import asyncio
 from typing import Optional
 
 from router.models import MODELS, TASK_ROUTING, ModelInfo
@@ -25,7 +26,7 @@ class RouterEngine:
         return available
 
     async def route(self, prompt: str, task_type: Optional[str] = None) -> str:
-        task = classify(prompt, task_type)
+        task = await classify(prompt, task_type)
         preferences = TASK_ROUTING.get(task, TASK_ROUTING["general"])
         errors = []
         for model_id in preferences:
@@ -55,10 +56,13 @@ class RouterEngine:
         return await prov.ask(model_id, prompt)
 
     async def compare(self, prompt: str, model_ids: list[str]) -> dict[str, str]:
-        results = {}
-        for model_id in model_ids:
+        async def fetch(mid: str):
             try:
-                results[model_id] = await self.ask(model_id, prompt)
+                res = await self.ask(mid, prompt)
+                return mid, res
             except ProviderError as e:
-                results[model_id] = f"ERROR: {e}"
-        return results
+                return mid, f"ERROR: {e}"
+
+        tasks = [fetch(mid) for mid in model_ids]
+        completed = await asyncio.gather(*tasks)
+        return dict(completed)
