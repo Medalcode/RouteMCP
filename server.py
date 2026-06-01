@@ -2,7 +2,8 @@ import json
 from mcp.server.fastmcp import FastMCP
 
 from router.engine import RouterEngine
-from router.models import MODELS
+from router.models import MODELS, TASK_ROUTING
+from router.classifier import classify
 
 mcp = FastMCP("RouteMCP")
 engine = RouterEngine()
@@ -18,7 +19,7 @@ async def route(prompt: str, task_type: str = "") -> str:
 
 
 @mcp.tool()
-async def ask(model: str, prompt: str) -> str:
+async def ask(model: str, prompt: str, temperature: float = 0.7, max_tokens: int = 8192) -> str:
     available = []
     for m in MODELS:
         prov = engine.providers.get(m.provider)
@@ -33,16 +34,16 @@ async def ask(model: str, prompt: str) -> str:
                     f"Available models: none")
         return f"Model '{model}' not found. Available: {available_str}"
     try:
-        return await engine.ask(model, prompt)
+        return await engine.ask(model, prompt, temperature=temperature, max_tokens=max_tokens)
     except Exception as e:
         return f"Error: {e}"
 
 
 @mcp.tool()
-async def compare(prompt: str, models: str) -> str:
+async def compare(prompt: str, models: str, temperature: float = 0.7, max_tokens: int = 8192) -> str:
     model_list = [m.strip() for m in models.split(",")]
     try:
-        results = await engine.compare(prompt, model_list)
+        results = await engine.compare(prompt, model_list, temperature=temperature, max_tokens=max_tokens)
         return "\n\n".join(
             f"=== {mid} ===\n{res}"
             for mid, res in results.items()
@@ -75,9 +76,7 @@ async def models() -> str:
 
 @mcp.tool()
 async def classify_task(prompt: str) -> str:
-    from router.classifier import classify as clf
-    task = await clf(prompt)
-    from router.models import TASK_ROUTING
+    task = await classify(prompt)
     recommended = TASK_ROUTING.get(task, TASK_ROUTING["general"])
     return (
         f"Detected task type: {task}\n"

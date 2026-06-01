@@ -137,20 +137,22 @@ def load_config():
             "task_keywords": _DEFAULT_TASK_KEYWORDS,
         }
         try:
-            with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            tmp_path = CONFIG_PATH + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(default_config, f, indent=4, ensure_ascii=False)
+            os.replace(tmp_path, CONFIG_PATH)
         except Exception:
-            pass # fallback to in-memory if directory not writable
+            pass
         return _DEFAULT_MODELS, _DEFAULT_TASK_ROUTING, _DEFAULT_TASK_KEYWORDS
-    
+
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
-            
+
         models = [ModelInfo(**m) for m in data.get("models", [])]
         if not models:
             models = _DEFAULT_MODELS
-            
+
         task_routing = data.get("task_routing", _DEFAULT_TASK_ROUTING)
         task_keywords = data.get("task_keywords", _DEFAULT_TASK_KEYWORDS)
         return models, task_routing, task_keywords

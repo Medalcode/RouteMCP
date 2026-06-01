@@ -52,6 +52,18 @@ Servidor MCP que clasifica tareas y enruta prompts al mejor modelo de IA disponi
 - **Classifier**: Híbrido (LLM basado en Groq `llama-3.1-8b` + Keyword-based fallback)
 - **Configuration**: Externa vía `config.json`
 
+## 🔧 Recent Improvements
+
+- **Cerebras Model Fixed** — Model parameter is now properly mapped (was always sending `llama3.3-70b` regardless of input)
+- **Retry Logic Deduplicated** — Shared `retry_ask()` helper in `base.py` replaces 3 copies of identical retry code
+- **`is_available()` Cached** — Provider availability cached for 60s TTL (no HTTP call on every routing decision)
+- **Configurable Temperature/Max Tokens** — `ask()` and `compare()` tools now accept `temperature` and `max_tokens` parameters
+- **Lazy Provider Init** — Providers are created only when first needed, not at server startup
+- **Provider-Model Validation** — Engine validates that the requested model belongs to the correct provider before forwarding
+- **Prompt Injection Mitigation** — Classifier truncates user input to 1000 chars with clear delimiters
+- **Atomic Config Write** — `config.json` uses `.tmp` + `os.replace()` to prevent corruption on concurrent writes
+- **Module-Level Imports** — `classify_task` no longer re-imports modules on every call
+
 ## Quick Start
 
 ```bash
